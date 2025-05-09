@@ -223,36 +223,58 @@ def profile():
 
     return jsonify({'message': 'Profile updated successfully'})
 
+@app.route('/addfunds1', methods=['POST'])
+@jwt_required()
+def addfunds1():
+        username = get_jwt_identity()
+        balance=Balance.query.filter_by(username=username).first()
+        # print("jk 1")
+        if not username:
+            return jsonify({'message': 'User not logged in'}), 401
+
+        if balance is not None :
+            return jsonify({'balance': balance.balance}), 200
+        
+        # return jsonify({'message': 'Amount is required'}), 400
+
+
 
 @app.route('/addfunds', methods=['POST'])
 @jwt_required()
 def addfunds():
-    username = get_jwt_identity()
-    balance=Balance.query.filter_by(username=username).first()
-    if balance!=0:
-        return jsonify({'balance': balance.balance}), 200
-    if not username:
-        return jsonify({'message': 'User not logged in'}), 401
+    # try:
+        username = get_jwt_identity()
+        balance=Balance.query.filter_by(username=username).first()
+        print("jk 1")
+        # if balance is not None :
+        #     return jsonify({'balance': balance.balance}), 200
+        if not username:
+            return jsonify({'message': 'User not logged in'}), 401
+        print("kk 1")
+        data = request.get_json()
+        amount = data.get('amount')
+        
+        # availablebalance=data.get('availablebalance')
 
-    data = request.get_json()
-    amount = data.get('amount')
-    
-    # availablebalance=data.get('availablebalance')
+        if not amount:
+            return jsonify({'message': 'Amount is required'}), 400
 
-    if not amount:
-        return jsonify({'message': 'Amount is required'}), 400
+        # username = session['user']
+        donation = Donation(username=username, amount=amount)
+        print("hello2")
+        db.session.add(donation)
+        # balance=Balance.query.filter_by(username=username).first()
+        # jsonify({'balance': balance.balance}), 200
+        
+        # db.session.add(donation)
+        db.session.commit()
 
-    # username = session['user']
-    donation = Donation(username=username, amount=amount)
-    balance=Balance.query.filter_by(username=email).first()
-    jsonify({'balance': balance.balance}), 200
-    
-    db.session.add(donation)
-    db.session.commit()
-
-    return jsonify({'message': 'payment was recorded'}), 200
+        return jsonify({'message': 'payment was recorded'}), 200
+    # except Exception as e:
+    #     return jsonify({'message': 'adding failed', 'error': str(e)}), 500
 
 @app.route('/utr', methods=['POST'])
+@jwt_required()
 def utr():
     username = get_jwt_identity()
     if not username:
@@ -264,7 +286,8 @@ def utr():
         return jsonify({'message': 'UTR NUMBER is required'}), 400
     utrnumber= Utrnumber(username=username, utr=utr)
     db.session.add(utrnumber)
-    db.session.commit()    
+    db.session.commit() 
+    return jsonify({'message': 'submitted'}), 200  
 
 
 @app.route('/withdraw', methods=['POST'])
