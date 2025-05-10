@@ -79,6 +79,10 @@ class SliderImage(db.Model):
     image_url = db.Column(db.String(500))  # Full URL or relative path
     # video_url = db.column(db.String(500))
 
+class SmallSliderImage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    image_url = db.Column(db.String(500))
+
 class SliderVideo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     video_url = db.Column(db.String(500))  # Full URL or relative path
@@ -153,6 +157,12 @@ from flask import jsonify
 @app.route('/slider-images', methods=['GET'])
 def get_slider_images():
     images = SliderImage.query.all()
+    image_urls = [img.image_url for img in images]
+    return jsonify(image_urls)
+
+@app.route('/small-slider-images', methods=['GET'])
+def get_small_slider_images():
+    images = SmallSliderImage.query.all()
     image_urls = [img.image_url for img in images]
     return jsonify(image_urls)
 
