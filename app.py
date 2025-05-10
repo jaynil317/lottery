@@ -123,6 +123,13 @@ class Ticket(db.Model):
     ticket_number = db.Column(db.String(20), unique=True, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class SupportTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(255), nullable=False)
+    subject = db.Column(db.String(255), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -273,6 +280,64 @@ def addfunds():
     # except Exception as e:
     #     return jsonify({'message': 'adding failed', 'error': str(e)}), 500
 
+
+@app.route('/support-tickets', methods=['POST'])
+@jwt_required()
+def create_support_ticket():
+    try:
+        user_id = get_jwt_identity()
+        print("User ID from JWT:", user_id) 
+        data = request.get_json()
+
+        subject = data.get('subject')
+        message = data.get('message')
+        timestamp = data.get('timestamp')  # optional, you can rely on server time
+
+        if not subject or not message:
+            return jsonify({'error': 'Subject and message are required'}), 400
+
+        ticket = SupportTicket(
+            user_id=user_id,
+            subject=subject,
+            message=message,
+            timestamp=timestamp or datetime.utcnow()
+        )
+
+        db.session.add(ticket)
+        db.session.commit()
+
+        return jsonify({
+        
+            'message': ticket.message
+            
+        }), 201
+    
+    except Exception as e:
+        return jsonify({'message': 'support request failed', 'error': str(e)}), 500
+
+
+@app.route('/support-tickets1', methods=['GET'])
+@jwt_required()
+def get_support_tickets1():
+    try:
+        user_id = get_jwt_identity()
+        print("User ID (GET):", user_id)  # Optional debug
+
+        tickets = SupportTicket.query.filter_by(user_id=user_id).order_by(SupportTicket.timestamp.desc()).all()
+
+        return jsonify([
+            {
+                'id': ticket.id,
+                'subject': ticket.subject,
+                'message': ticket.message,
+                'timestamp': ticket.timestamp.isoformat()
+            }
+            for ticket in tickets
+        ])
+
+    except Exception as e:
+        return jsonify({'message': 'failed', 'error': str(e)}), 500
+
 @app.route('/utr', methods=['POST'])
 @jwt_required()
 def utr():
@@ -294,25 +359,25 @@ def utr():
 @jwt_required()
 def withdraw():
     try:
-        print("Start withdrawal-5")
+        # print("Start withdrawal-5")
         user_id = get_jwt_identity()
-        print("Start withdrawal-4")
+        # print("Start withdrawal-4")
         data = request.get_json()
-        print("Start withdrawal-3")
+        # print("Start withdrawal-3")
         amount = data.get('amount')
         upiId=data.get('upiId')
 
-        print("Start withdrawal-2")
+        # print("Start withdrawal-2")
 
         if amount is None or amount <= 0 or upiId is None:
             return jsonify({'message': 'Invalid withdrawal amount'}), 400
         
-        print("Start withdrawal-1")
+        # print("Start withdrawal-1")
 
         user = User.query.filter_by(email=user_id).first()
         balance2 = Balance.query.filter_by(username=user_id).first()
 
-        print("Start withdrawal0")
+        # print("Start withdrawal0")
 
         if not user:
             return jsonify({'message': 'User not found'}), 404
@@ -320,14 +385,14 @@ def withdraw():
         if balance2.balance < amount:
             return jsonify({'message': 'Insufficient balance'}), 400
 
-        print("Start withdrawal1")
+        # print("Start withdrawal1")
 
         balance2.balance -= amount
 
 
         withdrawal_id = generate_withdrawal_id(user_id)
 
-        print("Start withdrawal2")
+        # print("Start withdrawal2")
 
         # Save withdrawal history
         withdrawal_entry = Withdrawal(
@@ -337,11 +402,11 @@ def withdraw():
             user_id=user_id, 
             amount=amount
             )
-        print("Start withdrawal3")
+        # print("Start withdrawal3")
 
         db.session.add(withdrawal_entry)
 
-        print("Start withdrawal4")
+        # print("Start withdrawal4")
 
         db.session.commit()
 
