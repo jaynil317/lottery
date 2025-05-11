@@ -58,6 +58,8 @@ class Utrnumber(db.Model):
     username = db.Column(db.String(80), nullable=False)
     utr=db.Column(db.String(12),nullable=False)
     timestamp = db.Column(db.DateTime, default=db.func.now())
+    status = db.Column(db.String(50))
+    amount = db.Column(db.Float, nullable=False)
 
 class Balance(db.Model):
     username = db.Column(db.String(80),primary_key=True, nullable=False)
@@ -361,9 +363,10 @@ def utr():
 
     data = request.get_json()
     utr=data.get('utrNumber')
+    amount=data.get('amount')
     if not utr:
         return jsonify({'message': 'UTR NUMBER is required'}), 400
-    utrnumber= Utrnumber(username=username, utr=utr)
+    utrnumber= Utrnumber(username=username, utr=utr,status='pending',amount=amount)
     db.session.add(utrnumber)
     db.session.commit() 
     return jsonify({'message': 'submitted'}), 200  
