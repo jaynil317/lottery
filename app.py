@@ -134,6 +134,10 @@ class SupportTicket(db.Model):
     message = db.Column(db.String(255), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Result(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False)
+    image_url = db.Column(db.String(255), nullable=False)
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -499,6 +503,26 @@ def my_tickets():
 
     return jsonify(ticket_data)
 
+
+
+@app.route('/result', methods=['POST'])
+# @jwt_required()
+def get_result_by_post():
+    # user_email = get_jwt_identity()
+    data = request.get_json()
+    date_str = data.get('date')
+    # print(date_str)
+
+    try:
+        query_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        # print(query_date)
+        result = Result.query.filter_by(date=query_date).first()
+        if result:
+            return jsonify({'image_url': result.image_url})
+        else:
+            return jsonify({'image_url': None}), 404
+    except:
+        return jsonify({'error': 'Invalid request'}), 400
 
 
 @app.route('/logout', methods=['POST'])
