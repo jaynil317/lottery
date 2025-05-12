@@ -30,11 +30,12 @@ from datetime import datetime
 
 def generate_withdrawal_id(username):
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")  # e.g., 20250429134520
-    random_number = random.randint(100, 999)                # e.g., 237
+    random_number = random.randint(100, 99999999)                # e.g., 237
     return f"withdraw_{username}_{timestamp}_{random_number}"
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    photo=db.Column(db.String(500))
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
 
@@ -70,7 +71,7 @@ class Withdrawal(db.Model):
     custom_id = db.Column(db.String(50), unique=True) 
     status = db.Column(db.String(50)) 
     upiId = db.Column(db.String(50))
-    user_id = db.Column(db.Integer,nullable=False)
+    user_id = db.Column(db.String(50),nullable=False)
     amount = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -78,16 +79,25 @@ class Withdrawal(db.Model):
 # Example SQLAlchemy model
 class SliderImage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    image_url = db.Column(db.String(500))  # Full URL or relative path
+    title = db.Column(db.String(500))
+    description = db.Column(db.String(500))
+    image_url = db.Column(db.String(500))
+    status = db.Column(db.String(25))  # Full URL or relative path
     # video_url = db.column(db.String(500))
 
 class SmallSliderImage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(500))
+    description = db.Column(db.String(500))
     image_url = db.Column(db.String(500))
+    status = db.Column(db.String(25))
 
 class SliderVideo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    video_url = db.Column(db.String(500))  # Full URL or relative path
+    title = db.Column(db.String(500))
+    description = db.Column(db.String(500))
+    video_url = db.Column(db.String(500))
+    status = db.Column(db.String(25))  # Full URL or relative path
 
 class LotteryDetail1(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -162,19 +172,19 @@ from flask import jsonify
 
 @app.route('/slider-images', methods=['GET'])
 def get_slider_images():
-    images = SliderImage.query.all()
+    images = SliderImage.query.filter_by(status='Active').all()
     image_urls = [img.image_url for img in images]
     return jsonify(image_urls)
 
 @app.route('/small-slider-images', methods=['GET'])
 def get_small_slider_images():
-    images = SmallSliderImage.query.all()
+    images = SmallSliderImage.query.filter_by(status='Active').all()
     image_urls = [img.image_url for img in images]
     return jsonify(image_urls)
 
 @app.route('/slider-video', methods=['GET'])
 def get_slider_video():
-    images = SliderVideo.query.all()
+    images = SliderVideo.query.filter_by(status='Active').all()
     video_url = [img.video_url for img in images]
     # video_url=images.video_url
     return jsonify(video_url)
@@ -532,6 +542,401 @@ def get_result_by_post():
 def logout():
     session.pop('logged_in', None)
     return jsonify({'message': 'Logged out successfully'}), 200
+
+@app.route('/admin_users', methods=['GET'])
+def get_users():
+    # users = User.query.all()
+    # # convert each model to a plain dict
+    # return jsonify([{
+    #     'id': u.id,
+    #     'email': u.email,
+    #     'password' : u.password,
+    #     'photo' : u.photo
+    #     # don't include password
+    # } for u in users]), 200
+    users = User.query.all()
+    profiles = {p.email: p.first_name for p in Profile.query.all()}
+    balances = {b.username: b.balance for b in Balance.query.all()}
+
+    user_list = []
+    for u in users:
+        name = profiles.get(u.email, "Unknown")
+        balance = balances.get(u.email, 0.0)
+        user_list.append({
+            'id': u.id,
+            'email': u.email,
+            'password': u.password,
+            'photo': u.photo,
+            'name': name,
+            'balance': balance
+        })
+    return jsonify(user_list), 200
+
+@app.route('/admin_deposits', methods=['GET'])
+def admin_deposits():
+    # users = User.query.all()
+    # # convert each model to a plain dict
+    # return jsonify([{
+    #     'id': u.id,
+    #     'email': u.email,
+    #     'password' : u.password,
+    #     'photo' : u.photo
+    #     # don't include password
+    # } for u in users]), 200
+    deposits = Utrnumber.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'userName': u.username,
+        'userPhoto': "https://randomuser.me/api/portraits/women/12.jpg",
+        'userId': u.id,
+        'amount' : u.amount ,
+        'currency': "INR",
+        'method': "UPI",
+        'time' : u.timestamp,
+        'utrNumber' : u.utr,
+        'status' : u.status
+               # don't include password
+    } for u in deposits]), 200
+
+@app.route('/update_deposit_status', methods=['POST'])
+def update_deposit_status():
+    data = request.get_json()
+    deposit_id = data.get('id')
+    username = data.get('userName')
+    amount = data.get('amount')
+    new_status = data.get('status')
+
+    deposit = Utrnumber.query.filter_by(id=deposit_id).first()
+    if not deposit:
+        return jsonify({'error': 'Deposit not found'}), 404
+
+    if new_status == 'Delete':
+        deposit = Utrnumber.query.filter_by(id=deposit_id).first()
+        if not deposit:
+            return jsonify({'error': 'Deposit not found'}), 404
+        db.session.delete(deposit)
+        db.session.commit()
+        return jsonify({'message': f'Deposit ID {deposit_id} status updated to {new_status}'}), 200
+
+    if new_status == 'Completed':
+        balances = Balance.query.filter_by(username=username).first()
+        balances.balance += amount
+        db.session.add(balances)
+        deposit.status = new_status
+        db.session.commit()
+        return jsonify({'message': f'Deposit ID {deposit_id} status updated to {new_status}'}), 200
+
+    deposit.status = new_status
+
+    db.session.commit()
+    return jsonify({'message': f'Deposit ID {deposit_id} status updated to {new_status}'}), 200
+
+
+
+    # return jsonify(user_list), 200
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    data = request.get_json()
+    id = data.get('userId')
+    user = User.query.filter_by(id=id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'users deleted'}), 200
+
+@app.route('/add_deposit', methods=['POST'])
+def add_deposit():
+    data = request.get_json()
+
+    new_deposit = Utrnumber(
+        username=data.get('userName'),
+        amount=data.get('amount'),
+        utr=data.get('utrNumber'),
+        status='pending',  # default status
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(new_deposit)
+    db.session.commit()
+
+    return jsonify({'message': 'Deposit added successfully'}), 201
+
+@app.route('/add_user', methods=['POST'])
+def add_user():
+    data = request.get_json()
+    
+    new_user = User(
+        photo=data.get('photo'),
+        email=data.get('email'),
+        password=data.get('password')
+        # status='pending',  # default status
+        # timestamp=datetime.utcnow()
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'user added successfully'}), 201
+
+@app.route('/admin_withdrawals', methods=['GET'])
+def admin_withdrawals():
+    # users = User.query.all()
+    # # convert each model to a plain dict
+    # return jsonify([{
+    #     'id': u.id,
+    #     'email': u.email,
+    #     'password' : u.password,
+    #     'photo' : u.photo
+    #     # don't include password
+    # } for u in users]), 200
+    deposits = Withdrawal.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'userName': u.user_id,
+        'userPhoto': "https://randomuser.me/api/portraits/men/11.jpg",
+        'userId': u.custom_id,
+        'upiId' : u.upiId,
+        'amount' : u.amount ,
+        'currency': "INR",
+        'method': "UPI",
+        'date' : u.timestamp,
+        
+        'status' : u.status
+               # don't include password
+    } for u in deposits]), 200
+
+@app.route('/add_withdrawal', methods=['POST'])
+def add_withdrawal():
+    data = request.get_json()
+    id=generate_withdrawal_id(data.get('userName'))
+    new_deposit = Withdrawal(
+        user_id=data.get('userName'),
+        custom_id=id,
+        amount=data.get('amount'),
+        upiId=data.get('upiId'),
+        status='pending',  # default status
+        timestamp=datetime.utcnow()
+    )
+    db.session.add(new_deposit)
+    db.session.commit()
+
+    return jsonify({'message': 'Deposit added successfully'}), 201
+
+
+@app.route('/update_withdraw_status', methods=['POST'])
+def update_withdraw_status():
+    data = request.get_json()
+    withdraw_id = data.get('custom_id')
+    # username = data.get('userName')
+    # amount = data.get('amount')
+    new_status = data.get('status')
+
+    deposit = Withdrawal.query.filter_by(custom_id=withdraw_id).first()
+    if not deposit:
+        return jsonify({'error': 'withdraw not found'}), 404
+
+    if new_status == 'Delete':
+        # deposit = Utrnumber.query.filter_by(id=deposit_id).first()
+        # if not deposit:
+        #     return jsonify({'error': 'Deposit not found'}), 404
+        db.session.delete(deposit)
+        db.session.commit()
+        return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
+
+    # if new_status == 'Completed':
+    #     balances = Balance.query.filter_by(username=username).first()
+    #     balances.balance += amount
+    #     db.session.add(balances)
+    #     deposit.status = new_status
+    #     db.session.commit()
+    #     return jsonify({'message': f'Deposit ID {deposit_id} status updated to {new_status}'}), 200
+
+    deposit.status = new_status
+
+    db.session.commit()
+    return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
+@app.route('/admin_big_slider', methods=['GET'])
+def admin_big_slider():
+    slider = SliderImage.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'title': u.title,
+        'description': u.description,
+        'image': u.image_url,
+        'status' : u.status
+               # don't include password
+    } for u in slider]), 200
+
+@app.route('/edit_bigslider', methods=['POST'])
+def edit_bigslider():
+    data = request.get_json()
+    id = data.get('id')
+    title = data.get('title')
+    description = data.get('description')
+    image= data.get('image')
+    status = data.get('status')
+    # print(description)
+    bigslider = SliderImage.query.filter_by(id=id).first()
+    if not bigslider:
+        return jsonify({'error': 'bigslider not found'}), 404
+    bigslider.title=title
+    bigslider.description=description
+    bigslider.image_url=image
+    bigslider.status=status
+    db.session.add(bigslider)
+    db.session.commit()
+    return jsonify({'message': 'bidslider changed'}), 200
+
+@app.route('/delete_bigslider', methods=['POST'])
+def delete_bigslider():
+    data = request.get_json()
+    id = data.get('id')
+    big_slider = SliderImage.query.filter_by(id=id).first()
+    if not big_slider:
+        return jsonify({'error': 'big_slider not found'}), 404
+    db.session.delete(big_slider)
+    db.session.commit()
+    return jsonify({'message': 'big_slider deleted'}), 200 
+
+@app.route('/add_bigslider', methods=['POST'])
+def add_bigslider():
+    try:
+        data = request.get_json()
+        id = data.get('id')
+        title = data.get('title')
+        description = data.get('description')
+        image= data.get('image')
+        status = data.get('status')
+        big_slider = SliderImage(title=title,description=description,image_url=image,status=status)
+        db.session.add(big_slider)
+        db.session.commit()
+        return jsonify({'message': 'big_slider added'}), 200
+    except e as exception:
+        return jsonify({'error': 'Invalid request'}), 400
+
+@app.route('/admin_small_slider', methods=['GET'])
+def admin_small_slider():
+    slider = SmallSliderImage.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'title': u.title,
+        'description': u.description,
+        'image': u.image_url,
+        'status' : u.status
+               # don't include password
+    } for u in slider]), 200
+
+@app.route('/edit_smallslider', methods=['POST'])
+def edit_smallslider():
+    data = request.get_json()
+    id = data.get('id')
+    title = data.get('title')
+    description = data.get('description')
+    image= data.get('image')
+    status = data.get('status')
+    # print(description)
+    smallslider = SmallSliderImage.query.filter_by(id=id).first()
+    if not smallslider:
+        return jsonify({'error': 'smallslider not found'}), 404
+    smallslider.title=title
+    smallslider.description=description
+    smallslider.image_url=image
+    smallslider.status=status
+    db.session.add(smallslider)
+    db.session.commit()
+    return jsonify({'message': 'smallslider changed'}), 200
+
+@app.route('/delete_smallslider', methods=['POST'])
+def delete_smallslider():
+    data = request.get_json()
+    id = data.get('id')
+    small_slider = SmallSliderImage.query.filter_by(id=id).first()
+    if not small_slider:
+        return jsonify({'error': 'small_slider not found'}), 404
+    db.session.delete(small_slider)
+    db.session.commit()
+    return jsonify({'message': 'small_slider deleted'}), 200 
+
+@app.route('/add_smallslider', methods=['POST'])
+def add_smallslider():
+    try:
+        data = request.get_json()
+        id = data.get('id')
+        title = data.get('title')
+        description = data.get('description')
+        image= data.get('image')
+        status = data.get('status')
+        small_slider = SmallSliderImage(title=title,description=description,image_url=image,status=status)
+        db.session.add(small_slider)
+        db.session.commit()
+        return jsonify({'message': 'small_slider added'}), 200
+    except:
+        return jsonify({'error': 'Invalid request'}), 400
+
+@app.route('/admin_video', methods=['GET'])
+def admin_video():
+    slider = SliderVideo.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'title': u.title,
+        'description': u.description,
+        'videoUrl': u.video_url,
+        'status' : u.status
+               # don't include password
+    } for u in slider]), 200
+
+@app.route('/edit_video', methods=['POST'])
+def edit_video():
+    data = request.get_json()
+    id = data.get('id')
+    title = data.get('title')
+    description = data.get('description')
+    videoUrl= data.get('videoUrl')
+    status = data.get('status')
+    # print(description)
+    video = SliderVideo.query.filter_by(id=id).first()
+    if not video:
+        return jsonify({'error': 'video not found'}), 404
+    video.title=title
+    video.description=description
+    video.video_url=videoUrl
+    video.status=status
+    db.session.add(video)
+    db.session.commit()
+    return jsonify({'message': 'video changed'}), 200
+
+@app.route('/delete_video', methods=['POST'])
+def delete_video():
+    data = request.get_json()
+    id = data.get('id')
+    video = SliderVideo.query.filter_by(id=id).first()
+    if not video:
+        return jsonify({'error': 'video not found'}), 404
+    db.session.delete(video)
+    db.session.commit()
+    return jsonify({'message': 'video deleted'}), 200 
+
+@app.route('/add_video', methods=['POST'])
+def add_video():
+    try:
+        data = request.get_json()
+        id = data.get('id')
+        title = data.get('title')
+        description = data.get('description')
+        video= data.get('videoUrl')
+        status = data.get('status')
+        video = SliderVideo(title=title,description=description,video_url=video,status=status)
+        db.session.add(video)
+        db.session.commit()
+        return jsonify({'message': 'video added'}), 200
+    except:
+        return jsonify({'error': 'Invalid request'}), 400
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
