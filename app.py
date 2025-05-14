@@ -5,6 +5,7 @@ from flask import session
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token,jwt_required, get_jwt_identity
 from datetime import datetime, timezone
+from datetime import date
 
 
 app = Flask(__name__)
@@ -102,18 +103,19 @@ class SliderVideo(db.Model):
 class LotteryDetail1(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
-    prize = db.Column(db.String(20), nullable=False)
+    prize = db.Column(db.Integer, nullable=False)
     prizeUnit = db.Column(db.String(20), nullable=False)
     drawDate = db.Column(db.String(20), nullable=False)
     drawTime = db.Column(db.String(20), nullable=False)
     ticketPrice = db.Column(db.String(20), nullable=False)
     winningAmount = db.Column(db.String(20), nullable=True)  # Note: corrected spelling
-    contestFilled = db.Column(db.Integer, nullable=False)
+    contestFilled = db.Column(db.Integer)
     contestSize = db.Column(db.Integer, nullable=False)
-    firstPrize = db.Column(db.String(20), nullable=False)
-    secondPrize = db.Column(db.String(20), nullable=False)
-    thirdPrize = db.Column(db.String(20), nullable=False)
+    firstPrize = db.Column(db.Integer, nullable=False)
+    secondPrize = db.Column(db.Integer, nullable=False)
+    thirdPrize = db.Column(db.Integer, nullable=False)
     percent30return=db.Column(db.Integer,nullable=False)
+    usersToReturn=db.Column(db.Integer,default=0,nullable=False)
 
     def to_dict(self):
         return {
@@ -130,7 +132,8 @@ class LotteryDetail1(db.Model):
             'firstPrize': self.firstPrize,
             'secondPrize': self.secondPrize,
             'thirdPrize': self.thirdPrize,
-            'percent30return': self.percent30return
+            'percent30return': self.percent30return,
+            'usersToReturn': self.usersToReturn
         }
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -150,6 +153,27 @@ class Result(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, nullable=False)
     image_url = db.Column(db.String(255), nullable=False)
+
+class Winner(db.Model):
+    __tablename__ = 'winners'
+
+    id = db.Column(db.Integer, primary_key=True)
+    photo = db.Column(db.String(255), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    date = db.Column(db.Date, nullable=False)
+
+    def __repr__(self):
+        return f"<Winner {self.name} - {self.amount}>"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "photo": self.photo,
+            "name": self.name,
+            "amount": str(self.amount),
+            "date": self.date.strftime("%Y-%m-%d")
+        }
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -728,8 +752,10 @@ def add_withdrawal():
 def update_withdraw_status():
     data = request.get_json()
     withdraw_id = data.get('custom_id')
-    # username = data.get('userName')
-    # amount = data.get('amount')
+    username = data.get('userName')
+    # print(username)
+    amount = data.get('amount')
+    # print(amount)
     new_status = data.get('status')
 
     deposit = Withdrawal.query.filter_by(custom_id=withdraw_id).first()
@@ -740,22 +766,41 @@ def update_withdraw_status():
         # deposit = Utrnumber.query.filter_by(id=deposit_id).first()
         # if not deposit:
         #     return jsonify({'error': 'Deposit not found'}), 404
-        db.session.delete(deposit)
+        if deposit.status == 'Rejected':
+            deposit.status = new_status
+            db.session.add(deposit)
+            db.session.commit()
+            return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
+
+        if deposit.status == 'Completed':
+            deposit.status = new_status
+            db.session.add(deposit)
+            db.session.commit()
+            return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
+        
+        balances = Balance.query.filter_by(username=username).first()
+        # print(balances)
+        balances.balance += amount
+        db.session.add(balances)
+        deposit.status = new_status
+        db.session.add(deposit)
         db.session.commit()
         return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
 
-    # if new_status == 'Completed':
-    #     balances = Balance.query.filter_by(username=username).first()
-    #     balances.balance += amount
-    #     db.session.add(balances)
-    #     deposit.status = new_status
-    #     db.session.commit()
-    #     return jsonify({'message': f'Deposit ID {deposit_id} status updated to {new_status}'}), 200
+    if new_status == 'Rejected':
+        balances = Balance.query.filter_by(username=username).first()
+        print(balances)
+        balances.balance += amount
+        db.session.add(balances)
+        deposit.status = new_status
+        db.session.commit()
+        return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
 
     deposit.status = new_status
 
     db.session.commit()
     return jsonify({'message': f'Deposit ID {withdraw_id} status updated to {new_status}'}), 200
+
 @app.route('/admin_big_slider', methods=['GET'])
 def admin_big_slider():
     slider = SliderImage.query.all()
@@ -935,6 +980,167 @@ def add_video():
         return jsonify({'message': 'video added'}), 200
     except:
         return jsonify({'error': 'Invalid request'}), 400
+
+@app.route('/admin_contest', methods=['GET'])
+def admin_contest():
+    # users = User.query.all()
+    # # convert each model to a plain dict
+    # return jsonify([{
+    #     'id': u.id,
+    #     'email': u.email,
+    #     'password' : u.password,
+    #     'photo' : u.photo
+    #     # don't include password
+    # } for u in users]), 200
+    lottery = LotteryDetail1.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'title' : u.title,
+        'prize' : u.prize,
+        'prizeUnit' : u.prizeUnit,
+        'drawDate' : u.drawDate,
+        'ticketPrice' : u.ticketPrice ,
+        'winningAmount' : u.winningAmount,
+        'contestFilled' : u.contestFilled,
+        'contestSize' : u.contestSize,
+        'firstPrize' : u.firstPrize,
+        'secondPrize' : u.secondPrize,
+        'thirdPrize' : u.thirdPrize,
+        'percent30return' : u.percent30return,
+        'returnAmount' : u.percent30return,
+        'usersToReturn' : u.usersToReturn
+               # don't include password
+    } for u in lottery]), 200
+
+@app.route('/edit_contests', methods=['POST','PUT'])
+def edit_contests():
+    try:
+        data = request.get_json()
+        id = data.get('id')
+        title = data.get('title')
+        prize = data.get('prize')
+        winningAmount= data.get('winningAmount')
+        prizeUnit = data.get('prizeUnit')
+        drawDate = data.get('drawDate')
+        drawTime = data.get('drawTime')
+        ticketPrice = data.get('ticketPrice')
+        contestSize = data.get('contestSize')
+        firstPrize = data.get('firstPrize')
+        secondPrize = data.get('secondPrize')
+        thirdPrize = data.get('thirdPrize')
+        returnAmount = data.get('returnAmount')
+        usersToReturn = data.get('usersToReturn')
+
+        # print(description)
+        contest = LotteryDetail1.query.filter_by(id=id).first()
+        if not contest:
+            return jsonify({'message': 'contest not found'}), 404
+        contest.title=title
+        contest.prize=f"₹ {prize}"
+        # contest.video_url=videoUrl
+        contest.winningAmount=f"₹ {winningAmount}"
+        contest.prizeUnit=prizeUnit
+        contest.drawDate=drawDate
+        contest.drawTime=drawTime
+        contest.ticketPrice=f"₹ {ticketPrice}"
+        contest.contestSize=contestSize
+        contest.firstPrize=firstPrize
+        contest.secondPrize=secondPrize
+        contest.thirdPrize=thirdPrize
+        contest.returnAmount=returnAmount
+        contest.usersToReturn=usersToReturn
+        db.session.add(contest)
+        db.session.commit()
+        return jsonify({'message': 'contest changed'}), 200
+    except e:
+        return jsonify({'message': e}), 404
+
+@app.route('/delete_contest', methods=['POST'])
+def delete_contest():
+    data = request.get_json()
+    id = data.get('contestId')
+    contests = LotteryDetail1.query.filter_by(id=id).first()
+    if not contests:
+        return jsonify({'error': 'contests not found'}), 404
+    db.session.delete(contests)
+    db.session.commit()
+    return jsonify({'message': 'contests deleted'}), 200 
+
+@app.route('/Add_contests', methods=['POST'])
+def Add_contests():
+    try:
+        data = request.get_json()
+        add_contest=LotteryDetail1(
+                title = data.get('title'),prize = data.get('prize'),winningAmount= data.get('winningAmount'),prizeUnit = data.get('prizeUnit'),drawDate = data.get('drawDate'),drawTime = data.get('drawTime'),ticketPrice = data.get('ticketPrice'),contestSize = data.get('contestSize'),firstPrize = data.get('firstPrize'),secondPrize = data.get('secondPrize'),thirdPrize = data.get('thirdPrize'),percent30return = data.get('returnAmount'),usersToReturn = data.get('usersToReturn'),contestFilled = 0
+        )
+        db.session.add(add_contest)
+        db.session.commit()
+    
+        return jsonify({'message': 'contest changed'}), 200
+    except Exception as e:
+        print("Error adding contest:", e)
+        return jsonify({'message': 'something wrong'}), 500
+
+@app.route('/winners', methods=['GET'])
+def get_winners():
+    winners = Winner.query.order_by(Winner.id).all()
+    return jsonify([w.to_dict() for w in winners])
+
+@app.route('/add_winners', methods=['POST'])
+def add_winner():
+    data = request.get_json()
+    try:
+        new_winner = Winner(
+            photo=data.get('photo'),
+            name=data.get('name'),
+            amount=float(data.get('amount')),
+            date=datetime.strptime(data.get('date'), "%Y-%m-%d").date()
+        )
+        db.session.add(new_winner)
+        db.session.commit()
+        return jsonify({"message": "Winner added successfully!"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+# @app.route('/winners/<int:winner_id>', methods=['DELETE'])
+# def delete_winner(winner_id):
+#     try:
+#         winner = Winner.query.get(winner_id)
+#         if not winner:
+#             return jsonify({"error": "Winner not found"}), 404
+
+#         db.session.delete(winner)
+#         db.session.commit()
+#         return jsonify({"message": "Winner deleted successfully"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+@app.route('/delete_winners/<int:winner_id>', methods=['POST'])
+def delete_winner(winner_id):
+    try:
+        winner = db.session.get(Winner, winner_id)  # ✅ modern SQLAlchemy 2.0+ way
+        if not winner:
+            return jsonify({"error": "Winner not found"}), 404
+
+        db.session.delete(winner)
+        db.session.commit()
+        return jsonify({"message": "Winner deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/admin_tickets', methods=['GET'])
+def admin_tickets():
+    ticket = Ticket.query.all()
+    return jsonify([{
+
+        'id' : u.id,
+        'user_email': u.user_email,
+        'lottery_id': u.lottery_id,
+        'ticket_number': u.ticket_number,
+        'timestamp' : u.timestamp
+               # don't include password
+    } for u in ticket]), 200
 
 
 if __name__ == '__main__':
