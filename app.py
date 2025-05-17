@@ -154,26 +154,65 @@ class Result(db.Model):
     date = db.Column(db.Date, nullable=False)
     image_url = db.Column(db.String(255), nullable=False)
 
+# class Winner(db.Model):
+#     __tablename__ = 'winners'
+
+#     id = db.Column(db.Integer, primary_key=True)
+#     photo = db.Column(db.String(255), nullable=False)
+#     name = db.Column(db.String(100), nullable=False)
+#     amount = db.Column(db.Float, nullable=False)
+#     date = db.Column(db.Date, nullable=False)
+
+#     def __repr__(self):
+#         return f"<Winner {self.name} - {self.amount}>"
+
+#     def to_dict(self):
+#         return {
+#             "id": self.id,
+#             "photo": self.photo,
+#             "name": self.name,
+#             "amount": str(self.amount),
+#             "date": self.date.strftime("%Y-%m-%d")
+#         }
+
 class Winner(db.Model):
     __tablename__ = 'winners'
 
     id = db.Column(db.Integer, primary_key=True)
-    photo = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    
+    contestTitle = db.Column(db.String(255), nullable=False)
 
-    def __repr__(self):
-        return f"<Winner {self.name} - {self.amount}>"
+    
+    name = db.Column(db.String(255), nullable=False)
+    photo = db.Column(db.String(500))  # optional field
+
+    position = db.Column(db.String(100), nullable=False)
+    amount = db.Column(db.Float, nullable=False)  # assuming prize can have decimals
+
+    date = db.Column(db.String(100), nullable=False)  # or use db.Date if using actual dates
+    status = db.Column(db.String(50), nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "photo": self.photo,
+            
+            "contestTitle": self.contestTitle,
+            
             "name": self.name,
-            "amount": str(self.amount),
-            "date": self.date.strftime("%Y-%m-%d")
+            "photo": self.photo,
+            "position": self.position,
+            "amount": self.amount,
+            "date": self.date,
+            "status": self.status
         }
+
+class QRCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.String(255))
+    image_url = db.Column(db.Text, nullable=False)  # base64-encoded image
+    status = db.Column(db.String(20), default='Active')
+
 
 @app.route('/signup', methods=['POST'])
 def signup():
@@ -1095,7 +1134,10 @@ def add_winner():
             photo=data.get('photo'),
             name=data.get('name'),
             amount=float(data.get('amount')),
-            date=datetime.strptime(data.get('date'), "%Y-%m-%d").date()
+            date=datetime.strptime(data.get('date'), "%Y-%m-%d").date(),
+            status=data.get('status'),
+            contestTitle=data.get('contestTitle'),
+            position=data.get('position')
         )
         db.session.add(new_winner)
         db.session.commit()
@@ -1142,6 +1184,174 @@ def admin_tickets():
                # don't include password
     } for u in ticket]), 200
 
+
+
+
+@app.route('/selected_winners', methods=['POST'])
+def selected_winners():
+    data = request.get_json()
+    winners = data.get('SelectedWinner', [])
+
+    try:
+        added_count = 0
+        for item in winners:
+            name = item.get('userName') or item.get('name')
+            photo = item.get('userPhoto') or item.get('photo')
+            amount = float(item.get('prize') or item.get('amount'))
+            date = datetime.strptime(item.get('date'), "%Y-%m-%d").date()
+            status = item.get('status')
+            contest_title = item.get('contestTitle')
+            position = item.get('position')
+
+            # Check if a winner with same name, contest, position, and date already exists
+            existing = Winner.query.filter_by(
+                name=name,
+                contestTitle=contest_title,
+                position=position,
+                date=date
+            ).first()
+
+            if existing:
+                continue  # Skip duplicate
+            
+            if status == "Approved":
+                new_winner = Winner(
+                    name=name,
+                    photo=photo,
+                    amount=amount,
+                    date=date,
+                    status=status,
+                    contestTitle=contest_title,
+                    position=position
+                )
+                db.session.add(new_winner)
+                added_count += 1
+                db.session.commit()
+                return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
+
+        db.session.commit()
+        return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/result_img', methods=['POST'])
+# @jwt_required()
+def result_img():
+    try:
+        
+        # print(query_date)
+        result = Result.query.all()
+        if result:
+            return jsonify([{
+                'id': u.id,
+                'photo': u.image_url,
+                'time' : u.date
+                    
+            } for u in result]), 200
+        else:
+            return jsonify({'photo' : None,'time' : None}), 404
+    except:
+        return jsonify({'error': 'Invalid request'}), 400
+
+@app.route('/edit_result_img', methods=['POST'])
+def edit_result_img():
+    data = request.get_json()
+    id = data.get('id')
+    time = data.get('date')
+    photo = data.get('photo')
+    result = Result.query.filter_by(id=id).first()
+    if not result :
+        return jsonify({'error': 'result  not found'}), 404
+    result.date=time
+    result.image_url=photo  
+    db.session.add(result)
+    db.session.commit()
+    return jsonify({'message': 'result changed'}), 200
+
+@app.route('/add_result', methods=['POST'])
+def add_result():
+    data = request.get_json()
+    try:
+        result = Result(
+            image_url=data.get('photo'),
+            date = data.get('Date')
+            
+        )
+        db.session.add(result)
+        db.session.commit()
+        return jsonify({"message": "Result added successfully!"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/delete_result', methods=['POST'])
+def delete_result():
+    data = request.get_json()
+    id = data.get('id')
+    result = Result.query.filter_by(id=id).first()
+    if not result:
+        return jsonify({'error': 'result not found'}), 404
+    db.session.delete(result)
+    db.session.commit()
+    return jsonify({'message': 'result deleted'}), 200 
+
+@app.route("/qrcodes", methods=["GET"])
+def get_qrcodes():
+    qrs = QRCode.query.all()
+    return jsonify([{
+        "id": qr.id,
+        "title": qr.title,
+        "description": qr.description,
+        "imageUrl": qr.image_url,
+        "status": qr.status
+    } for qr in qrs]), 200
+
+@app.route("/add_qrcodes", methods=["POST"])
+def add_qrcode():
+    data = request.json
+    new_qr = QRCode(
+        title=data["title"],
+        description=data.get("description", ""),
+        image_url=data["imageUrl"],
+        status=data.get("status", "Inactive")
+    )
+    db.session.add(new_qr)
+    db.session.commit()
+    return jsonify({
+        "message":"completed"
+    }), 200
+
+@app.route("/edit_qrcodes", methods=["POST"])
+def update_qrcode():
+    data = request.get_json()
+    id=data.get("id")
+    qr = QRCode.query.filter_by(id=id).first()
+    if not qr:
+        return jsonify({"error": "QR code not found"}), 404
+
+    data = request.json
+    qr.title = data.get("title", qr.title)
+    qr.description = data.get("description", qr.description)
+    qr.image_url = data.get("imageUrl", qr.image_url)
+    qr.status = data.get("status", qr.status)
+
+    db.session.commit()
+    return jsonify({
+        "message":"completed"
+    }), 200
+
+@app.route("/delete_qrcodes", methods=["POST"])
+def delete_qrcode():
+    data = request.get_json()
+    id=data.get("id")
+    qr = QRCode.query.filter_by(id=id).first()
+    if not qr:
+        return jsonify({"error": "QR code not found"}), 404
+
+    db.session.delete(qr)
+    db.session.commit()
+    return jsonify({"message": "QR code deleted"}), 200
 
 if __name__ == '__main__':
     with app.app_context():
