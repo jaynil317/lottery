@@ -1213,7 +1213,7 @@ def selected_winners():
             photo = item.get('userPhoto') or item.get('photo')
             amount = float(item.get('prize') or item.get('amount'))
             date = datetime.strptime(item.get('date'), "%Y-%m-%d").date()
-            status = item.get('status')
+            status = "Approved"
             contest_title = item.get('contestTitle')
             position = item.get('position')
 
