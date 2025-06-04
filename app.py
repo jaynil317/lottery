@@ -521,43 +521,54 @@ def get_withdrawals():
 @app.route('/buy-ticket', methods=['POST'])
 @jwt_required()
 def buy_ticket():
-    user_email = get_jwt_identity()
-    data = request.get_json()
-    lottery_id = data.get('lottery_id')
+    try:
+        user_email = get_jwt_identity()
+        
+        data = request.get_json()
+        lottery_id = data.get('lottery_id')
+        
+        if not lottery_id:
+            return jsonify({'message': 'Lottery ID required'}), 400
+        
+        user_balance = Balance.query.filter_by(username=user_email).first()
+        lottery = LotteryDetail1.query.filter_by(id=lottery_id).first()
+        
+        if not user_balance or not lottery:
+            return jsonify({'message': 'Invalid user or lottery'}), 400
+        
+        ticket_price = float(lottery.ticketPrice.replace('₹', '').strip())
 
-    if not lottery_id:
-        return jsonify({'message': 'Lottery ID required'}), 400
+        
+        if user_balance.balance < ticket_price:
+            return jsonify({'message': 'Insufficient balance'}), 400
 
-    user_balance = Balance.query.filter_by(username=user_email).first()
-    lottery = LotteryDetail1.query.filter_by(id=lottery_id).first()
+        # Deduct balance
+        user_balance.balance -= ticket_price
+        
+        # NEW: Prevent buying if contest is full
+        if lottery.contestFilled >= lottery.contestSize:
+            return jsonify({'message': 'This lottery contest is already full'}), 400
+        
+        lottery.contestFilled += 1
+        db.session.add(lottery)
+        
+        # db.session.add(Balance)
 
-    if not user_balance or not lottery:
-        return jsonify({'message': 'Invalid user or lottery'}), 400
+        # Generate unique ticket number
+        ticket_number = f"TKT{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{random.randint(100,999)}"
+        
 
-    ticket_price = float(lottery.ticketPrice.replace('₹', '').strip())
+        # Create and save ticket
+        
+        ticket = Ticket(user_email=user_email, lottery_id=lottery_id, ticket_number=ticket_number)
+        
+        db.session.add(ticket)
+        db.session.commit()
 
+        return jsonify({'ticket_number': ticket_number, 'new_balance': user_balance.balance})
+    except Exception as j:
+        return jsonify({'error': 'Invalid request', 'details': str(j)}), 400
 
-    if user_balance.balance < ticket_price:
-        return jsonify({'message': 'Insufficient balance'}), 400
-
-    # Deduct balance
-    user_balance.balance -= ticket_price
-    lottery.contestFilled += 1
-    db.session.add(lottery)
-    # db.session.add(Balance)
-
-    # Generate unique ticket number
-    ticket_number = f"TKT{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{random.randint(100,999)}"
-     # NEW: Prevent buying if contest is full
-    if lottery.contestFilled >= lottery.contestSize:
-        return jsonify({'message': 'This lottery contest is already full'}), 400
-
-    # Create and save ticket
-    ticket = Ticket(user_email=user_email, lottery_id=lottery_id, ticket_number=ticket_number)
-    db.session.add(ticket)
-    db.session.commit()
-
-    return jsonify({'message': 'Ticket purchased', 'ticket_number': ticket_number, 'new_balance': user_balance.balance})
 
 
 @app.route('/my-tickets', methods=['GET'])
@@ -1191,6 +1202,9 @@ def admin_tickets():
 def selected_winners():
     data = request.get_json()
     winners = data.get('SelectedWinner', [])
+    
+    if not isinstance(winners, list):
+        return jsonify({"error": "Invalid data format: 'SelectedWinner' should be a list."}), 400
 
     try:
         added_count = 0
