@@ -1137,23 +1137,54 @@ def get_winners():
     winners = Winner.query.order_by(Winner.id).all()
     return jsonify([w.to_dict() for w in winners])
 
+# @app.route('/add_winners', methods=['POST'])
+# def add_winner():
+#     data = request.get_json()
+#     try:
+#         new_winner = Winner(
+#             photo=data.get('photo'),
+#             name=data.get('name'),
+#             amount=float(data.get('amount')),
+#             date=datetime.strptime(data.get('date'), "%Y-%m-%d").date(),
+#             status=data.get('status'),
+#             contestTitle=data.get('contestTitle'),
+#             position=data.get('position')
+#         )
+#         db.session.add(new_winner)
+#         db.session.commit()
+#         return jsonify({"message": "Winner added successfully!"}), 201
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 400
 @app.route('/add_winners', methods=['POST'])
-def add_winner():
+def add_winners():
     data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
     try:
-        new_winner = Winner(
-            photo=data.get('photo'),
-            name=data.get('name'),
-            amount=float(data.get('amount')),
-            date=datetime.strptime(data.get('date'), "%Y-%m-%d").date(),
-            status=data.get('status'),
-            contestTitle=data.get('contestTitle'),
-            position=data.get('position')
-        )
-        db.session.add(new_winner)
+        # If it's a single object, convert it into a list
+        winners_data = data if isinstance(data, list) else [data]
+        new_winners = []
+
+        for entry in winners_data:
+            new_winner = Winner(
+                photo=entry.get('photo'),
+                name=entry.get('name'),
+                amount=float(entry.get('amount')),
+                date=datetime.strptime(entry.get('date'), "%Y-%m-%d").date(),
+                status=entry.get('status'),
+                contestTitle=entry.get('contestTitle'),
+                position=entry.get('position')
+            )
+            db.session.add(new_winner)
+            new_winners.append(new_winner)
+
         db.session.commit()
-        return jsonify({"message": "Winner added successfully!"}), 201
+        return jsonify({"message": f"{len(new_winners)} winner(s) added successfully!"}), 201
+
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 400
 
 # @app.route('/winners/<int:winner_id>', methods=['DELETE'])
