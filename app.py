@@ -1229,15 +1229,16 @@ def selected_winners():
                 continue  # Skip duplicate
             
             if status == "Approved":
-                new_winner = Winner(
-                    name=name,
-                    photo=photo,
-                    amount=amount,
-                    date=date,
-                    status=status,
-                    contestTitle=contest_title,
-                    position=position
-                )
+                new_winner = Winner.query.filter_by(name=name,contestTitle=contest_title).first()
+                new_winner.status=status
+                #     name=name,
+                #     photo=photo,
+                #     amount=amount,
+                #     date=date,
+                #     status=status,
+                #     contestTitle=contest_title,
+                #     position=position
+                # )
                 balance=Balance.query.filter_by(username=name).first()
                 balance.balance+=amount
                 
@@ -1248,7 +1249,7 @@ def selected_winners():
                 return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
 
         db.session.commit()
-        return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
+        return jsonify({"message": "winner(s) not added successfully!"}), 201
 
     except Exception as e:
         db.session.rollback()
