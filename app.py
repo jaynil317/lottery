@@ -565,7 +565,7 @@ def buy_ticket():
         db.session.add(ticket)
         db.session.commit()
 
-        return jsonify({'ticket_number': ticket_number, 'new_balance': user_balance.balance})
+        return jsonify({'ticket_number': ticket_number, 'new_balance': user_balance.balance, "success": True})
     except Exception as j:
         return jsonify({'error': 'Invalid request', 'details': str(j)}), 400
 
