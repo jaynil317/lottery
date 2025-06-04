@@ -1201,16 +1201,19 @@ def admin_tickets():
 @app.route('/selected_winners', methods=['POST'])
 def selected_winners():
     data = request.get_json()
-    winners = data.get('SelectedWinner', [])
+    winners = data.get('approvedWinners', [])
     
     if not isinstance(winners, list):
         return jsonify({"error": "Invalid data format: 'SelectedWinner' should be a list."}), 400
 
     try:
         added_count = 0
+        print(winners)
         for item in winners:
             name = item.get('userName') or item.get('name')
+            # print(name)
             photo = item.get('userPhoto') or item.get('photo')
+
             amount = float(item.get('prize') or item.get('amount'))
             date = datetime.strptime(item.get('date'), "%Y-%m-%d").date()
             status = "Approved"
@@ -1218,17 +1221,18 @@ def selected_winners():
             position = item.get('position')
 
             # Check if a winner with same name, contest, position, and date already exists
-            existing = Winner.query.filter_by(
-                name=name,
-                contestTitle=contest_title,
-                position=position,
-                date=date
-            ).first()
+            # existing = Winner.query.filter_by(
+            #     name=name,
+            #     contestTitle=contest_title,
+            #     position=position,
+            #     date=date
+            # ).first()
 
-            if existing:
-                continue  # Skip duplicate
+            # if existing:
+            #     continue  # Skip duplicate
             
             if status == "Approved":
+                
                 new_winner = Winner.query.filter_by(name=name,contestTitle=contest_title).first()
                 new_winner.status=status
                 #     name=name,
@@ -1237,9 +1241,11 @@ def selected_winners():
                 #     date=date,
                 #     status=status,
                 #     contestTitle=contest_title,
-                #     position=position
+                #     position=positionBalance
                 # )
+                
                 balance=Balance.query.filter_by(username=name).first()
+                
                 balance.balance+=amount
                 
                 db.session.add(new_winner)
