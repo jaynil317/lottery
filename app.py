@@ -1238,7 +1238,11 @@ def selected_winners():
                     contestTitle=contest_title,
                     position=position
                 )
+                balance=Balance.query.filter_by(username=name).first()
+                balance.balance+=amount
+                
                 db.session.add(new_winner)
+                db.session.add(balance)
                 added_count += 1
                 db.session.commit()
                 return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
