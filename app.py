@@ -1246,7 +1246,7 @@ def selected_winners():
                 db.session.add(balance)
                 added_count += 1
                 db.session.commit()
-                return jsonify({"message": f"{added_count} winner(s) added successfully!"}), 201
+                return jsonify({"message": f"{added_count} winner(s) addedd successfully!"}), 201
 
         db.session.commit()
         return jsonify({"message": "winner(s) not added successfully!"}), 201
