@@ -42,7 +42,7 @@ class User(db.Model):
 
 class AdminUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    photo=db.Column(db.String(500))
+    email = db.Column(db.String(255), unique=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     role=db.Column(db.String(255))
