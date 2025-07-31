@@ -40,6 +40,14 @@ class User(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
 
+class AdminUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    photo=db.Column(db.String(500))
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    role=db.Column(db.String(255))
+    status=db.column(db.String(255))
+
 class Profile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
@@ -276,6 +284,24 @@ def login():
         return jsonify({'access_token': access_token,'wallet_balance': balance.balance}), 200
 
     return jsonify({'message': 'Invalid credentials'}), 401     
+
+@app.route('/adminlogin', methods=['POST'])
+def admin_login():
+     # Assuming you have a User model for regular users
+    all_users = AdminUser.query.all()
+    users_list = [{
+            'id': u.id,
+            'name': u.name,
+            'email': u.email,
+            'role': u.role,
+            'status': u.status
+    } for u in all_users]
+
+    return jsonify({         
+            'users': users_list
+    }), 200
+
+    
 
 @app.route('/profile', methods=['GET', 'POST'])
 @jwt_required()
